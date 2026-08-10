@@ -1,0 +1,34 @@
+[
+  {
+    "id": "1",
+    "username": "admin",
+    "name": "Administrator",
+    "email": "admin@example.com",
+    "role": "admin",
+    "passwordHash": "$2b$10$ZBy6KOO4enfWM6Vd1Oif1.8Fujkd69WlioeGm.8b8C6izcbWmof4G"
+  },
+  {
+    "id": "2",
+    "username": "editor",
+    "name": "Website Editor",
+    "email": "editor@example.com",
+    "role": "editor",
+    "passwordHash": "$2b$10$O7F8adPb.FMIaTxJBMkLYOnz9vXgusyuCIpk9OgYHqiYwSvGelRuW"
+  },
+  {
+    "id": "3",
+    "username": "viewer",
+    "name": "Website Viewer",
+    "email": "viewer@example.com",
+    "role": "viewer",
+    "passwordHash": "$2b$10$tns.3RIyqg9isFNRoUit5uabdtFSc.LIkOegwXFbF3GICIipvPcCK"
+  },
+  {
+    "id": "4",
+    "username": "yash",
+    "name": "Yash Garg",
+    "email": "gargyash5931@gmail.com",
+    "role": "admin",
+    "passwordHash": "$2b$10$6fm2fDKUrPvAXgh1KCRC7u99UBRHIeApwNybp3UvHJZWxc12JcCq2"
+  }
+]

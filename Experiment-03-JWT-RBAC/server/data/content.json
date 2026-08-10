@@ -1,0 +1,9 @@
+{
+  "siteName": "Yash Garg Portal",
+  "heroTitle": "Welcome to the Website",
+  "heroText": "This website is managed using JWT authentication and role based access control.",
+  "announcement": "Welcome back! Your website is running successfully.",
+  "about": "This website content can be edited by Admin and Editor users.",
+  "lastUpdatedBy": "system",
+  "lastUpdatedAt": "2026-08-10T16:42:23.252Z"
+}
