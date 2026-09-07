@@ -1,720 +1,1111 @@
-import { useEffect, useMemo, useState } from "react";
-import FullCalendar from "@fullcalendar/react";
-import dayGridPlugin from "@fullcalendar/react/daygrid";
-import timeGridPlugin from "@fullcalendar/react/timegrid";
-import interactionPlugin from "@fullcalendar/react/interaction";
-
-import "@fullcalendar/react/skeleton.css";
+import React, { useMemo, useState } from "react";
 import "./App.css";
 
-const STORAGE_KEY = "post-scheduler-posts";
-
-const defaultPosts = [
+const initialPosts = [
   {
-    id: "1",
-    title: "Instagram Post",
-    start: "2026-08-15T10:00:00",
+    id: 1,
+    title: "New video announcement",
+    date: "2026-08-30",
+    color: "#ef1717",
+    platform: "Instagram",
+    time: "10:00 am",
+    status: "Draft",
+  },
+  {
+    id: 2,
+    title: "Birthday",
+    date: "2026-09-09",
+    color: "#df2f76",
+    platform: "Instagram",
+    time: "12:00 am",
     status: "Scheduled",
   },
   {
-    id: "2",
-    title: "Weekly Update",
-    start: "2026-08-21T11:30:00",
+    id: 3,
+    title: "Weekly industry tip",
+    date: "2026-09-17",
+    color: "#1467b9",
+    platform: "LinkedIn",
+    time: "09:00 am",
     status: "Scheduled",
   },
   {
-    id: "3",
-    title: "bday",
-    start: "2026-08-27T00:00:00",
+    id: 4,
+    title: "Product launch teaser",
+    date: "2026-09-22",
+    color: "#df2f76",
+    platform: "Instagram",
+    time: "06:00 pm",
     status: "Scheduled",
+  },
+  {
+    id: 5,
+    title: "Customer story",
+    date: "2026-09-28",
+    color: "#f1a928",
+    platform: "Facebook",
+    time: "11:00 am",
+    status: "Draft",
   },
 ];
 
+const pad = (n) => String(n).padStart(2, "0");
+
+const dateKey = (date) =>
+  `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
+    date.getDate()
+  )}`;
+
+function addDays(date, amount) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + amount);
+  return d;
+}
+
+function startOfWeek(date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - d.getDay());
+  return d;
+}
+
+function getMonthDays(date) {
+  const first = new Date(date.getFullYear(), date.getMonth(), 1);
+  const start = startOfWeek(first);
+
+  return Array.from({ length: 42 }, (_, index) =>
+    addDays(start, index)
+  );
+}
+
+function formatDate(date) {
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function formatUpcoming(value) {
+  const d = new Date(`${value}T12:00:00`);
+
+  return d.toLocaleDateString("en-US", {
+    day: "numeric",
+    month: "short",
+  });
+}
+
 function App() {
-  const [posts, setPosts] = useState(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      return saved ? JSON.parse(saved) : defaultPosts;
-    } catch {
-      return defaultPosts;
-    }
-  });
+  const [posts, setPosts] = useState(initialPosts);
 
-  const [showPosts, setShowPosts] = useState(true);
+  const [currentDate, setCurrentDate] = useState(
+    new Date(2026, 8, 7)
+  );
+
+  const [view, setView] = useState("Month");
+
+  const [optimized, setOptimized] = useState(true);
+
+  const [dark, setDark] = useState(false);
+
+  const [draggedId, setDraggedId] = useState(null);
+
+  const [selectedPost, setSelectedPost] = useState(null);
+
   const [showModal, setShowModal] = useState(false);
-  const [editingPost, setEditingPost] = useState(null);
 
-  const [form, setForm] = useState({
-    title: "",
-    date: "",
-    time: "",
-    status: "Scheduled",
+  const [stats, setStats] = useState({
+    calendarView: 26,
+    calendar: 26,
+    events: 63,
+    modal: 0,
+    sidebar: 9,
   });
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(posts));
-  }, [posts]);
+  const days = useMemo(
+    () => getMonthDays(currentDate),
+    [currentDate]
+  );
 
-  const statistics = useMemo(() => {
-    return {
-      scheduled: posts.filter((post) => post.status === "Scheduled").length,
-      drafts: posts.filter((post) => post.status === "Draft").length,
-      published: posts.filter((post) => post.status === "Published").length,
-      total: posts.length,
-    };
-  }, [posts]);
+  const scheduledCount = posts.filter(
+    (post) => post.status === "Scheduled"
+  ).length;
 
-  const calendarEvents = posts.map((post) => ({
-    id: post.id,
-    title: post.title,
-    start: post.start,
-    editable: true,
-    backgroundColor: getStatusColor(post.status),
-    borderColor: getStatusColor(post.status),
-    extendedProps: {
-      status: post.status,
-    },
-  }));
+  const draftCount = posts.filter(
+    (post) => post.status === "Draft"
+  ).length;
 
-  function getStatusColor(status) {
-    if (status === "Published") return "#22a06b";
-    if (status === "Draft") return "#f0a51a";
-    return "#7561e8";
-  }
+  const monthName = currentDate.toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+  });
 
-  function openAddModal(date = "") {
-    const now = new Date();
+  const visibleDays =
+    view === "Week"
+      ? Array.from({ length: 7 }, (_, index) =>
+          addDays(startOfWeek(currentDate), index)
+        )
+      : view === "Day"
+      ? [currentDate]
+      : days;
 
-    let selectedDate = date;
-
-    if (!selectedDate) {
-      selectedDate = now.toISOString().split("T")[0];
-    }
-
-    setEditingPost(null);
-
-    setForm({
-      title: "",
-      date: selectedDate,
-      time: "10:00",
-      status: "Scheduled",
-    });
-
-    setShowModal(true);
-  }
-
-  function openEditModal(post) {
-    const [date, timePart] = post.start.split("T");
-
-    setEditingPost(post);
-
-    setForm({
-      title: post.title,
-      date,
-      time: timePart ? timePart.substring(0, 5) : "10:00",
-      status: post.status,
-    });
-
-    setShowModal(true);
-  }
-
-  function closeModal() {
-    setShowModal(false);
-    setEditingPost(null);
-  }
-
-  function handleFormChange(event) {
-    const { name, value } = event.target;
-
-    setForm((previous) => ({
+  function updateStats(values = {}) {
+    setStats((previous) => ({
       ...previous,
-      [name]: value,
+      ...values,
     }));
   }
 
-  function savePost(event) {
-    event.preventDefault();
+  function changeDate(amount) {
+    const next = new Date(currentDate);
 
-    if (!form.title.trim()) {
-      alert("Please enter a post title.");
-      return;
+    if (view === "Month") {
+      next.setMonth(next.getMonth() + amount);
     }
 
-    if (!form.date) {
-      alert("Please select a date.");
-      return;
+    if (view === "Week") {
+      next.setDate(next.getDate() + amount * 7);
     }
 
-    const start = `${form.date}T${form.time || "10:00"}:00`;
-
-    if (editingPost) {
-      setPosts((previous) =>
-        previous.map((post) =>
-          post.id === editingPost.id
-            ? {
-                ...post,
-                title: form.title.trim(),
-                start,
-                status: form.status,
-              }
-            : post
-        )
-      );
-    } else {
-      const newPost = {
-        id: crypto.randomUUID(),
-        title: form.title.trim(),
-        start,
-        status: form.status,
-      };
-
-      setPosts((previous) => [...previous, newPost]);
+    if (view === "Day") {
+      next.setDate(next.getDate() + amount);
     }
 
-    closeModal();
-  }
+    setCurrentDate(next);
 
-  function deletePost(id) {
-    const post = posts.find((item) => item.id === id);
-
-    if (!post) return;
-
-    const confirmed = window.confirm(
-      `Delete "${post.title}"?`
-    );
-
-    if (!confirmed) return;
-
-    setPosts((previous) =>
-      previous.filter((item) => item.id !== id)
-    );
-  }
-
-  function changeStatus(id, status) {
-    setPosts((previous) =>
-      previous.map((post) =>
-        post.id === id
-          ? {
-              ...post,
-              status,
-            }
-          : post
-      )
-    );
-  }
-
-  function handleDateClick(info) {
-    openAddModal(info.dateStr);
-  }
-
-  function handleEventClick(info) {
-    const post = posts.find(
-      (item) => item.id === info.event.id
-    );
-
-    if (post) {
-      openEditModal(post);
-    }
-  }
-
-  function handleEventDrop(info) {
-    const newStart = info.event.start;
-
-    if (!newStart) return;
-
-    const year = newStart.getFullYear();
-    const month = String(
-      newStart.getMonth() + 1
-    ).padStart(2, "0");
-
-    const day = String(
-      newStart.getDate()
-    ).padStart(2, "0");
-
-    const hours = String(
-      newStart.getHours()
-    ).padStart(2, "0");
-
-    const minutes = String(
-      newStart.getMinutes()
-    ).padStart(2, "0");
-
-    const newDateTime =
-      `${year}-${month}-${day}T${hours}:${minutes}:00`;
-
-    setPosts((previous) =>
-      previous.map((post) =>
-        post.id === info.event.id
-          ? {
-              ...post,
-              start: newDateTime,
-            }
-          : post
-      )
-    );
-  }
-
-  function handleEventResize(info) {
-    const newStart = info.event.start;
-
-    if (!newStart) return;
-
-    const year = newStart.getFullYear();
-    const month = String(
-      newStart.getMonth() + 1
-    ).padStart(2, "0");
-
-    const day = String(
-      newStart.getDate()
-    ).padStart(2, "0");
-
-    const hours = String(
-      newStart.getHours()
-    ).padStart(2, "0");
-
-    const minutes = String(
-      newStart.getMinutes()
-    ).padStart(2, "0");
-
-    const newDateTime =
-      `${year}-${month}-${day}T${hours}:${minutes}:00`;
-
-    setPosts((previous) =>
-      previous.map((post) =>
-        post.id === info.event.id
-          ? {
-              ...post,
-              start: newDateTime,
-            }
-          : post
-      )
-    );
-  }
-
-  function formatPostDate(start) {
-    return new Date(start).toLocaleString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
+    updateStats({
+      calendarView: stats.calendarView + 1,
+      calendar: stats.calendar + 1,
     });
   }
 
+  function goToday() {
+    setCurrentDate(new Date(2026, 8, 7));
+
+    updateStats({
+      calendarView: stats.calendarView + 1,
+    });
+  }
+
+  function handleDrop(date) {
+    if (!draggedId) return;
+
+    setPosts((previousPosts) =>
+      previousPosts.map((post) =>
+        post.id === draggedId
+          ? {
+              ...post,
+              date: dateKey(date),
+            }
+          : post
+      )
+    );
+
+    setDraggedId(null);
+
+    updateStats({
+      calendarView: stats.calendarView + 1,
+      calendar: stats.calendar + 1,
+      events: stats.events + 1,
+    });
+  }
+
+  function optimizeCalendar() {
+    const baseDate = new Date(2026, 8, 9);
+
+    const times = [
+      "10:00 am",
+      "12:00 am",
+      "09:00 am",
+      "06:00 pm",
+      "11:00 am",
+    ];
+
+    const optimizedPosts = posts.map((post, index) => ({
+      ...post,
+      date: dateKey(addDays(baseDate, index * 4)),
+      time: times[index % times.length],
+    }));
+
+    setPosts(optimizedPosts);
+
+    setOptimized(true);
+
+    updateStats({
+      calendarView: stats.calendarView + 3,
+      calendar: stats.calendar + 3,
+      events: stats.events + posts.length * 2,
+    });
+  }
+
+  function openPost(post) {
+    setSelectedPost(post);
+
+    updateStats({
+      modal: stats.modal + 1,
+    });
+  }
+
+  function createPost(event) {
+    event.preventDefault();
+
+    const form = new FormData(event.currentTarget);
+
+    const title =
+      form.get("title")?.toString().trim() || "New post";
+
+    const platform =
+      form.get("platform")?.toString() || "Instagram";
+
+    const date =
+      form.get("date")?.toString() || dateKey(currentDate);
+
+    const rawTime =
+      form.get("time")?.toString() || "10:00";
+
+    const colors = {
+      Instagram: "#df2f76",
+      LinkedIn: "#1467b9",
+      Facebook: "#f1a928",
+      X: "#111827",
+    };
+
+    const [hour, minute] = rawTime.split(":");
+
+    const hourNumber = Number(hour);
+
+    const formattedTime = `${
+      hourNumber > 12 ? hourNumber - 12 : hourNumber
+    }:${minute} ${hourNumber >= 12 ? "pm" : "am"}`;
+
+    const newPost = {
+      id: Date.now(),
+      title,
+      platform,
+      date,
+      time: formattedTime,
+      color: colors[platform] || "#7256ed",
+      status: "Scheduled",
+    };
+
+    setPosts((previousPosts) => [
+      ...previousPosts,
+      newPost,
+    ]);
+
+    setShowModal(false);
+
+    updateStats({
+      modal: stats.modal + 1,
+      calendar: stats.calendar + 1,
+      events: stats.events + 1,
+    });
+  }
+
+  function postsForDay(date) {
+    return posts.filter(
+      (post) => post.date === dateKey(date)
+    );
+  }
+
   return (
-    <div className="app">
+    <div className={`app-shell ${dark ? "dark" : ""}`}>
+      {/* HEADER */}
 
-      {/* Header */}
-      <section className="hero">
-        <div>
-          <div className="eyebrow">
-            CONTENT MANAGEMENT
-          </div>
-
-          <h1>Post Scheduler</h1>
-
-          <p>
-            Plan, schedule and manage your posts in one place.
-          </p>
-        </div>
-
-        <button
-          className="primary-button"
-          onClick={() => openAddModal()}
-        >
-          + Add New Post
-        </button>
-      </section>
-
-      {/* Statistics */}
-      <section className="stats-grid">
-
-        <StatCard
-          icon="🗓️"
-          title="Scheduled Posts"
-          value={statistics.scheduled}
-          description="Ready to publish"
-          type="scheduled"
-        />
-
-        <StatCard
-          icon="📝"
-          title="Drafts"
-          value={statistics.drafts}
-          description="Still in progress"
-          type="draft"
-        />
-
-        <StatCard
-          icon="✓"
-          title="Published"
-          value={statistics.published}
-          description="Successfully published"
-          type="published"
-        />
-
-        <StatCard
-          icon="📊"
-          title="Total Posts"
-          value={statistics.total}
-          description="All your posts"
-          type="total"
-        />
-
-      </section>
-
-      {/* Manage Posts */}
-      <section className="content-card">
-
-        <div className="section-header">
+      <header className="topbar">
+        <div className="brand">
+          <div className="brand-mark">✦</div>
 
           <div>
-            <div className="eyebrow">CONTENT</div>
-            <h2>Manage Posts</h2>
+            <div className="eyebrow">
+              CONTENT PLANNING
+            </div>
+
+            <h1>Social Scheduler</h1>
+          </div>
+        </div>
+
+        <div className="top-actions">
+          <div className="hint">
+            Drag posts to find better publishing windows.
           </div>
 
           <button
-            className="outline-button"
-            onClick={() => setShowPosts((value) => !value)}
+            className="theme-button"
+            onClick={() => setDark((value) => !value)}
           >
-            {showPosts ? "Hide Posts ▲" : "Show Posts ▼"}
+            ◐ {dark ? "Light" : "Dark"}
           </button>
-
         </div>
+      </header>
 
-        {showPosts && (
-          <div className="post-list">
+      <main className="page">
 
-            {posts.length === 0 ? (
-              <div className="empty-state">
-                No posts available.
+        {/* RENDERING PANEL */}
+
+        <section className="stats-panel">
+          <div className="stats-heading">
+            <div>
+              <div className="eyebrow">
+                REACT RENDERING
               </div>
-            ) : (
-              posts.map((post) => (
-                <div
-                  className="post-row"
-                  key={post.id}
-                >
 
-                  <div className="post-information">
+              <h2>
+                {optimized ? "Optimized" : "Standard"}
+              </h2>
+            </div>
 
-                    <div className="post-title-line">
-                      <strong>{post.title}</strong>
+            <button
+              className={`switch ${
+                optimized ? "on" : ""
+              }`}
+              onClick={() => {
+                setOptimized((value) => !value);
 
-                      <span
-                        className={`status-badge ${post.status.toLowerCase()}`}
-                      >
-                        {post.status}
-                      </span>
-                    </div>
+                updateStats({
+                  calendarView:
+                    stats.calendarView + 1,
+                  events: stats.events + 1,
+                });
+              }}
+            >
+              <span />
+              <strong>
+                {optimized ? "Optimized" : "Standard"}
+              </strong>
+            </button>
+          </div>
 
-                    <div className="post-date">
-                      ◷ {formatPostDate(post.start)}
-                    </div>
+          <div className="stat-grid">
+            <Stat
+              number={stats.calendarView}
+              label="CalendarView renders"
+            />
 
-                  </div>
+            <Stat
+              number={stats.calendar}
+              label="Calendar renders"
+            />
 
-                  <div className="post-actions">
+            <Stat
+              number={stats.events}
+              label="Event renders"
+            />
 
-                    <select
-                      value={post.status}
-                      onChange={(event) =>
-                        changeStatus(
-                          post.id,
-                          event.target.value
-                        )
-                      }
-                    >
-                      <option>Scheduled</option>
-                      <option>Draft</option>
-                      <option>Published</option>
-                    </select>
+            <Stat
+              number={stats.modal}
+              label="Post modal renders"
+            />
+          </div>
 
+          <div className="stat-foot">
+            <span>
+              Sidebar renders: {stats.sidebar}
+            </span>
+
+            <span>
+              Total tracked renders:{" "}
+              {stats.calendarView +
+                stats.calendar +
+                stats.events +
+                stats.modal +
+                stats.sidebar}
+            </span>
+          </div>
+
+          <p className="muted">
+            Change the calendar, drag a post, open a post,
+            or switch views to observe rendering activity.
+          </p>
+        </section>
+
+        {/* MAIN WORKSPACE */}
+
+        <div className="workspace">
+
+          {/* CALENDAR */}
+
+          <section className="calendar-card">
+
+            <div className="calendar-toolbar">
+
+              <button
+                className="today-btn"
+                onClick={goToday}
+              >
+                Today
+              </button>
+
+              <button
+                className="icon-btn"
+                onClick={() => changeDate(-1)}
+              >
+                ‹
+              </button>
+
+              <button
+                className="icon-btn"
+                onClick={() => changeDate(1)}
+              >
+                ›
+              </button>
+
+              <div className="view-switch">
+                {["Month", "Week", "Day"].map(
+                  (item) => (
                     <button
-                      className="edit-button"
-                      onClick={() =>
-                        openEditModal(post)
+                      key={item}
+                      className={
+                        view === item ? "active" : ""
                       }
+                      onClick={() => {
+                        setView(item);
+
+                        updateStats({
+                          calendarView:
+                            stats.calendarView + 1,
+                        });
+                      }}
                     >
-                      Edit
+                      {item}
                     </button>
-
-                    <button
-                      className="delete-button"
-                      onClick={() =>
-                        deletePost(post.id)
-                      }
-                    >
-                      Delete
-                    </button>
-
-                  </div>
-
-                </div>
-              ))
-            )}
-
-          </div>
-        )}
-
-      </section>
-
-      {/* Drag information */}
-      <div className="drag-info">
-        ↔ Drag and drop a post on the calendar to reschedule it.
-      </div>
-
-      {/* Calendar */}
-      <section className="calendar-card">
-
-        <div className="calendar-heading">
-
-          <div>
-            <div className="eyebrow">SCHEDULE</div>
-            <h2>Content Calendar</h2>
-          </div>
-
-          <div className="legend">
-
-            <span>
-              <i className="dot scheduled-dot"></i>
-              Scheduled
-            </span>
-
-            <span>
-              <i className="dot draft-dot"></i>
-              Draft
-            </span>
-
-            <span>
-              <i className="dot published-dot"></i>
-              Published
-            </span>
-
-          </div>
-
-        </div>
-
-        <div className="calendar-wrapper">
-
-          <FullCalendar
-            plugins={[
-              dayGridPlugin,
-              timeGridPlugin,
-              interactionPlugin,
-            ]}
-            initialView="dayGridMonth"
-            initialDate="2026-08-18"
-
-            headerToolbar={{
-              left: "prev,next today",
-              center: "title",
-              right:
-                "dayGridMonth,timeGridWeek,timeGridDay",
-            }}
-
-            buttonText={{
-              today: "Today",
-              month: "Month",
-              week: "Week",
-              day: "Day",
-            }}
-
-            events={calendarEvents}
-
-            editable={true}
-            selectable={true}
-            dayMaxEvents={3}
-
-            dateClick={handleDateClick}
-            eventClick={handleEventClick}
-            eventDrop={handleEventDrop}
-            eventResize={handleEventResize}
-
-            height="auto"
-            contentHeight="650px"
-
-            eventDisplay="block"
-
-            eventContent={(info) => (
-              <div className="custom-event">
-
-                <span className="event-dot"></span>
-
-                <span>
-                  {info.timeText
-                    ? `${info.timeText} `
-                    : ""}
-                  {info.event.title}
-                </span>
-
-              </div>
-            )}
-          />
-
-        </div>
-
-      </section>
-
-      {/* Modal */}
-      {showModal && (
-        <div
-          className="modal-overlay"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
-              closeModal();
-            }
-          }}
-        >
-
-          <div className="modal">
-
-            <div className="modal-header">
-
-              <div>
-                <div className="eyebrow">
-                  CONTENT MANAGEMENT
-                </div>
-
-                <h2>
-                  {editingPost
-                    ? "Edit Post"
-                    : "Create New Post"}
-                </h2>
+                  )
+                )}
               </div>
 
               <button
-                className="close-button"
-                onClick={closeModal}
+                className="new-post"
+                onClick={() => setShowModal(true)}
+              >
+                + New post
+              </button>
+
+              <button
+                className="optimize-btn"
+                onClick={optimizeCalendar}
+              >
+                ● Optimize calendar
+              </button>
+            </div>
+
+            <div className="calendar-title">
+              <h2>
+                {view === "Month"
+                  ? monthName
+                  : view === "Week"
+                  ? `Week of ${formatDate(
+                      startOfWeek(currentDate)
+                    )}`
+                  : formatDate(currentDate)}
+              </h2>
+
+              <span>
+                {posts.length} posts in your content plan
+              </span>
+            </div>
+
+            {/* MONTH VIEW */}
+
+            {view === "Month" && (
+              <div className="month-grid">
+
+                <div className="week-head">
+                  {[
+                    "SUN",
+                    "MON",
+                    "TUE",
+                    "WED",
+                    "THU",
+                    "FRI",
+                    "SAT",
+                  ].map((day) => (
+                    <div key={day}>{day}</div>
+                  ))}
+                </div>
+
+                <div className="days-grid">
+                  {days.map((day) => {
+                    const outside =
+                      day.getMonth() !==
+                      currentDate.getMonth();
+
+                    const isToday =
+                      dateKey(day) ===
+                      dateKey(
+                        new Date(2026, 8, 7)
+                      );
+
+                    const dayPosts =
+                      postsForDay(day);
+
+                    return (
+                      <div
+                        key={dateKey(day)}
+                        className={`day-cell ${
+                          outside ? "outside" : ""
+                        } ${
+                          isToday ? "today-cell" : ""
+                        }`}
+                        onDragOver={(event) =>
+                          event.preventDefault()
+                        }
+                        onDrop={() =>
+                          handleDrop(day)
+                        }
+                      >
+                        <div className="day-number">
+                          {pad(day.getDate())}
+                        </div>
+
+                        <div className="event-list">
+                          {dayPosts.map((post) => (
+                            <PostChip
+                              key={post.id}
+                              post={post}
+                              onDragStart={() =>
+                                setDraggedId(post.id)
+                              }
+                              onClick={() =>
+                                openPost(post)
+                              }
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+              </div>
+            )}
+
+            {/* WEEK VIEW */}
+
+            {view === "Week" && (
+              <div className="week-view">
+                {visibleDays.map((day) => (
+                  <DayColumn
+                    key={dateKey(day)}
+                    date={day}
+                    posts={postsForDay(day)}
+                    onDrop={() =>
+                      handleDrop(day)
+                    }
+                    onDragStart={setDraggedId}
+                    onClick={openPost}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* DAY VIEW */}
+
+            {view === "Day" && (
+              <div
+                className="day-view"
+                onDragOver={(event) =>
+                  event.preventDefault()
+                }
+                onDrop={() =>
+                  handleDrop(currentDate)
+                }
+              >
+                <div className="day-view-header">
+                  <span>
+                    {currentDate.toLocaleDateString(
+                      "en-US",
+                      { weekday: "long" }
+                    )}
+                  </span>
+
+                  <strong>
+                    {currentDate.getDate()}
+                  </strong>
+                </div>
+
+                <div className="day-timeline">
+                  {Array.from(
+                    { length: 10 },
+                    (_, index) => {
+                      const hour = index + 9;
+
+                      const displayHour =
+                        hour > 12
+                          ? hour - 12
+                          : hour;
+
+                      const label = `${displayHour}:00 ${
+                        hour >= 12 ? "pm" : "am"
+                      }`;
+
+                      return (
+                        <div
+                          className="timeline-row"
+                          key={hour}
+                        >
+                          <span>{label}</span>
+
+                          <div>
+                            {postsForDay(
+                              currentDate
+                            )
+                              .filter((post) =>
+                                post.time
+                                  .toLowerCase()
+                                  .startsWith(
+                                    `${displayHour}:`
+                                  )
+                              )
+                              .map((post) => (
+                                <PostChip
+                                  key={post.id}
+                                  post={post}
+                                  onDragStart={() =>
+                                    setDraggedId(
+                                      post.id
+                                    )
+                                  }
+                                  onClick={() =>
+                                    openPost(post)
+                                  }
+                                />
+                              ))}
+                          </div>
+                        </div>
+                      );
+                    }
+                  )}
+                </div>
+              </div>
+            )}
+          </section>
+
+          {/* SIDEBAR */}
+
+          <aside className="sidebar">
+
+            {/* SCHEDULE PREFERENCE */}
+
+            <section className="side-card preference-card">
+
+              <div className="side-title">
+                <span className="eyebrow">
+                  SCHEDULE PREFERENCE
+                </span>
+
+                <strong>70%</strong>
+              </div>
+
+              <div className="orange-progress">
+                <span />
+              </div>
+
+              <div className="best-window">
+                <div>
+                  <strong>
+                    Workable publishing window
+                  </strong>
+
+                  <span>
+                    Wed, 12:00 am
+                  </span>
+                </div>
+
+                <p>
+                  This slot can work, although another
+                  time may give you a stronger schedule.
+                </p>
+              </div>
+
+              <Range
+                label="Time window"
+                value="40"
+                width="42%"
+              />
+
+              <Range
+                label="Post spacing"
+                value="100"
+                width="100%"
+              />
+
+              <Range
+                label="Day quality"
+                value="95"
+                width="95%"
+              />
+
+              <Range
+                label="Preferred time"
+                value="60"
+                width="60%"
+              />
+
+              <div className="best-result">
+                Best window: Wed, 10:00 am
+              </div>
+            </section>
+
+            {/* UPCOMING POSTS */}
+
+            <section className="side-card upcoming-card">
+
+              <div className="side-title">
+                <h3>Upcoming posts</h3>
+
+                <span className="count-pill">
+                  {posts.length}
+                </span>
+              </div>
+
+              <div className="mini-stats">
+
+                <div>
+                  <strong>
+                    {draftCount}
+                  </strong>
+
+                  <span>DRAFTS</span>
+                </div>
+
+                <div>
+                  <strong>
+                    {scheduledCount}
+                  </strong>
+
+                  <span>SCHEDULED</span>
+                </div>
+
+                <div>
+                  <strong>0</strong>
+                  <span>LIVE</span>
+                </div>
+
+              </div>
+
+              <div className="upcoming-list">
+                {posts.slice(0, 4).map((post) => (
+                  <button
+                    className="upcoming-item"
+                    key={post.id}
+                    onClick={() =>
+                      openPost(post)
+                    }
+                  >
+                    <span
+                      className="dot"
+                      style={{
+                        background: post.color,
+                      }}
+                    />
+
+                    <span className="upcoming-content">
+
+                      <strong>
+                        {post.title}
+                      </strong>
+
+                      <small>
+                        {post.platform} /{" "}
+                        {formatUpcoming(
+                          post.date
+                        )}
+                        , {post.time}
+                      </small>
+
+                      <em>
+                        {post.status}
+                      </em>
+
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          </aside>
+        </div>
+      </main>
+
+      {/* POST DETAILS MODAL */}
+
+      {selectedPost && (
+        <div
+          className="modal-backdrop"
+          onClick={() =>
+            setSelectedPost(null)
+          }
+        >
+          <div
+            className="modal"
+            onClick={(event) =>
+              event.stopPropagation()
+            }
+          >
+            <div className="modal-head">
+              <div>
+                <div className="eyebrow">
+                  POST DETAILS
+                </div>
+
+                <h3>
+                  {selectedPost.title}
+                </h3>
+              </div>
+
+              <button
+                onClick={() =>
+                  setSelectedPost(null)
+                }
               >
                 ×
               </button>
-
             </div>
 
-            <form onSubmit={savePost}>
+            <div className="detail-row">
+              <span>Platform</span>
+              <strong>
+                {selectedPost.platform}
+              </strong>
+            </div>
 
-              <label>
-                Post Title
+            <div className="detail-row">
+              <span>Date</span>
 
-                <input
-                  type="text"
-                  name="title"
-                  placeholder="Enter post title"
-                  value={form.title}
-                  onChange={handleFormChange}
-                  autoFocus
-                />
-              </label>
+              <strong>
+                {formatDate(
+                  new Date(
+                    `${selectedPost.date}T12:00:00`
+                  )
+                )}
+              </strong>
+            </div>
 
-              <div className="form-row">
+            <div className="detail-row">
+              <span>Time</span>
 
-                <label>
-                  Date
+              <strong>
+                {selectedPost.time}
+              </strong>
+            </div>
 
-                  <input
-                    type="date"
-                    name="date"
-                    value={form.date}
-                    onChange={handleFormChange}
-                  />
-                </label>
+            <div className="detail-row">
+              <span>Status</span>
 
-                <label>
-                  Time
+              <strong>
+                {selectedPost.status}
+              </strong>
+            </div>
 
-                  <input
-                    type="time"
-                    name="time"
-                    value={form.time}
-                    onChange={handleFormChange}
-                  />
-                </label>
-
-              </div>
-
-              <label>
-                Status
-
-                <select
-                  name="status"
-                  value={form.status}
-                  onChange={handleFormChange}
-                >
-                  <option value="Scheduled">
-                    Scheduled
-                  </option>
-
-                  <option value="Draft">
-                    Draft
-                  </option>
-
-                  <option value="Published">
-                    Published
-                  </option>
-                </select>
-              </label>
-
-              <div className="modal-actions">
-
-                <button
-                  type="button"
-                  className="cancel-button"
-                  onClick={closeModal}
-                >
-                  Cancel
-                </button>
-
-                <button
-                  type="submit"
-                  className="primary-button"
-                >
-                  {editingPost
-                    ? "Save Changes"
-                    : "Create Post"}
-                </button>
-
-              </div>
-
-            </form>
-
+            <button
+              className="new-post full"
+              onClick={() =>
+                setSelectedPost(null)
+              }
+            >
+              Close
+            </button>
           </div>
-
         </div>
       )}
 
+      {/* NEW POST MODAL */}
+
+      {showModal && (
+        <div
+          className="modal-backdrop"
+          onClick={() =>
+            setShowModal(false)
+          }
+        >
+          <form
+            className="modal"
+            onSubmit={createPost}
+            onClick={(event) =>
+              event.stopPropagation()
+            }
+          >
+            <div className="modal-head">
+              <div>
+                <div className="eyebrow">
+                  CONTENT PLANNING
+                </div>
+
+                <h3>
+                  Create new post
+                </h3>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setShowModal(false)
+                }
+              >
+                ×
+              </button>
+            </div>
+
+            <label>
+              Post title
+
+              <input
+                name="title"
+                placeholder="e.g. Product launch teaser"
+                required
+              />
+            </label>
+
+            <label>
+              Platform
+
+              <select
+                name="platform"
+                defaultValue="Instagram"
+              >
+                <option>
+                  Instagram
+                </option>
+
+                <option>
+                  LinkedIn
+                </option>
+
+                <option>
+                  Facebook
+                </option>
+
+                <option>
+                  X
+                </option>
+              </select>
+            </label>
+
+            <div className="form-two">
+
+              <label>
+                Date
+
+                <input
+                  name="date"
+                  type="date"
+                  defaultValue={dateKey(
+                    currentDate
+                  )}
+                />
+              </label>
+
+              <label>
+                Time
+
+                <input
+                  name="time"
+                  type="time"
+                  defaultValue="10:00"
+                />
+              </label>
+
+            </div>
+
+            <button
+              className="new-post full"
+              type="submit"
+            >
+              Create post
+            </button>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
 
-function StatCard({
-  icon,
-  title,
-  value,
-  description,
-  type,
+function Stat({ number, label }) {
+  return (
+    <div className="stat-box">
+      <strong>{number}</strong>
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function Range({ label, value, width }) {
+  return (
+    <div className="range">
+      <div>
+        <span>{label}</span>
+        <b>{value}</b>
+      </div>
+
+      <div className="range-track">
+        <span style={{ width }} />
+      </div>
+    </div>
+  );
+}
+
+function PostChip({
+  post,
+  onDragStart,
+  onClick,
 }) {
   return (
-    <div className="stat-card">
+    <button
+      className="post-chip"
+      style={{
+        background: post.color,
+      }}
+      draggable
+      onDragStart={onDragStart}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick(post);
+      }}
+      title={`${post.title} — drag to another date`}
+    >
+      {post.title}
+    </button>
+  );
+}
 
-      <div className={`stat-icon ${type}`}>
-        {icon}
+function DayColumn({
+  date,
+  posts,
+  onDrop,
+  onDragStart,
+  onClick,
+}) {
+  return (
+    <div
+      className="day-column"
+      onDragOver={(event) =>
+        event.preventDefault()
+      }
+      onDrop={onDrop}
+    >
+      <div className="column-date">
+        <span>
+          {date.toLocaleDateString("en-US", {
+            weekday: "short",
+          })}
+        </span>
+
+        <strong>
+          {date.getDate()}
+        </strong>
       </div>
 
-      <div>
-        <div className="stat-title">
-          {title}
-        </div>
-
-        <div className="stat-value">
-          {value}
-        </div>
-
-        <div className="stat-description">
-          {description}
-        </div>
+      <div className="column-events">
+        {posts.map((post) => (
+          <PostChip
+            key={post.id}
+            post={post}
+            onDragStart={() =>
+              onDragStart(post.id)
+            }
+            onClick={onClick}
+          />
+        ))}
       </div>
-
     </div>
   );
 }
